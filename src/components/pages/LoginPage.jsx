@@ -1,20 +1,51 @@
 import React, { useState } from 'react';
-import { Shield, Mail, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Shield } from 'lucide-react';
+import { supabase } from '../../supabaseClient'; // Pastikan path ini benar
 
 export default function LoginPage({ onLoginSuccess, onNavigate }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (onLoginSuccess) {
-      onLoginSuccess({ email, password });
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // 1. Coba login menggunakan email dan password
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("Login gagal, silakan coba lagi.");
+
+      // 2. Jika login berhasil, ambil profil lengkap dari tabel 'profiles'
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single(); // .single() untuk mendapatkan satu objek, bukan array
+
+      if (profileError) throw profileError;
+
+      // 3. Kirim data profil yang sudah lengkap ke App.jsx
+      onLoginSuccess(profileData);
+
+    } catch (error) {
+      console.error("Error saat login:", error.message);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-white flex items-center justify-center p-4 relative">
-      <button 
+       <button 
         onClick={() => onNavigate('landing')} 
         className="absolute top-4 left-4 flex items-center space-x-2 text-slate-300 hover:text-yellow-300 transition-colors z-20 p-2 rounded-md bg-slate-800/50"
       >
@@ -30,44 +61,35 @@ export default function LoginPage({ onLoginSuccess, onNavigate }) {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="text"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-11 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all"
-            />
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="password"
-              placeholder="Kata Sandi"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-11 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all"
-            />
-          </div>
+          {error && (
+            <div className="p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-300 text-center text-sm">
+                {error}
+            </div>
+          )}
+          <input
+            type="email"
+            placeholder="Alamat Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          />
+          <input
+            type="password"
+            placeholder="Kata Sandi"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          />
           <button
             type="submit"
-            className="w-full bg-yellow-400 text-slate-900 font-bold py-3 px-6 rounded-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 flex items-center justify-center"
+            disabled={isLoading}
+            className="w-full bg-yellow-400 text-slate-900 font-bold py-3 px-6 rounded-lg hover:bg-yellow-300 transition-all duration-300 flex items-center justify-center disabled:bg-slate-500"
           >
-            Masuk <ArrowRight className="ml-2" size={20} />
+            {isLoading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
-
-        <div className="text-center mt-8 pt-6 border-t border-slate-700">
-          <p className="text-slate-400 text-sm">
-            Belum punya akun?{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('register'); }} className="font-bold text-yellow-300 hover:underline">
-              Daftar di sini
-            </a>
-          </p>
-        </div>
       </div>
     </div>
   );
