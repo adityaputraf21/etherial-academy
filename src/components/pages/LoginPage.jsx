@@ -1,3 +1,5 @@
+// src/components/pages/LoginPage.jsx
+
 import React, { useState } from 'react';
 import { ArrowLeft, Shield } from 'lucide-react';
 import { supabase } from '../../supabaseClient'; // Pastikan path ini benar
@@ -14,7 +16,7 @@ export default function LoginPage({ onLoginSuccess, onNavigate }) {
     setError(null);
 
     try {
-      // 1. Coba login menggunakan email dan password
+      // Coba login menggunakan email dan password
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
@@ -23,17 +25,9 @@ export default function LoginPage({ onLoginSuccess, onNavigate }) {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Login gagal, silakan coba lagi.");
 
-      // 2. Jika login berhasil, ambil profil lengkap dari tabel 'profiles'
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single(); // .single() untuk mendapatkan satu objek, bukan array
-
-      if (profileError) throw profileError;
-
-      // 3. Kirim data profil yang sudah lengkap ke App.jsx
-      onLoginSuccess(profileData);
+      // Jika login berhasil, onLoginSuccess akan dipanggil oleh listener di App.jsx
+      // Jadi kita tidak perlu memanggilnya di sini secara eksplisit.
+      // Cukup biarkan listener onAuthStateChange yang bekerja.
 
     } catch (error) {
       console.error("Error saat login:", error.message);

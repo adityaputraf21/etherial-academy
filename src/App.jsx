@@ -1,3 +1,5 @@
+// src/App.jsx
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient'; // Pastikan path ini benar
 
@@ -5,7 +7,9 @@ import { supabase } from './supabaseClient'; // Pastikan path ini benar
 import Header from './components/Header';
 import HeroSection from './components/sections/HeroSection';
 import AboutSection from './components/sections/AboutSection';
-// ... (impor komponen landing page lainnya)
+import HouseSection from './components/sections/HouseSection';
+import ProgramSection from './components/sections/ProgramSection';
+import CtaSection from './components/sections/CtaSection';
 import Footer from './components/Footer';
 import LoginPage from './components/pages/LoginPage';
 import RegisterPage from './components/pages/RegisterPage';
@@ -17,55 +21,96 @@ function App() {
   const [view, setView] = useState('landing');
   const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Cek sesi yang ada saat aplikasi dimuat
+  // Fungsi untuk mengambil data profil berdasarkan peran
+  const fetchUserProfile = async (user) => {
+    if (!user) return null;
+
+    const role = user.user_metadata?.role;
+    if (!role) return null;
+
+    let tableName = '';
+    let idColumn = '';
+
+    if (role === 'siswa') {
+      tableName = 'siswa';
+      idColumn = 'id_siswa';
+    } else if (role === 'tutor') {
+      tableName = 'tutor';
+      idColumn = 'id_tutor';
+    } else if (role === 'admin') {
+      tableName = 'admin';
+      idColumn = 'id_admin';
+    } else {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('*')
+      .eq('email', user.email) // Mencari berdasarkan email
+      .single();
+
+    if (error) {
+      console.error(`Error fetching ${role} profile:`, error);
+      return null;
+    }
+    
+    // Menambahkan peran ke data profil untuk kemudahan
+    return { ...data, role };
+  };
+
   useEffect(() => {
-    const getSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        if (session) {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-            setCurrentUser(profile);
-        }
-    };
-    getSession();
+    setLoading(true);
+    // Cek sesi awal
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user);
+        setCurrentUser(profile);
+      }
+      setLoading(false);
+    });
 
     // Dengarkan perubahan status otentikasi
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        const getProfile = async () => {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-            setCurrentUser(profile);
-        };
-        getProfile();
-      } else {
-        setCurrentUser(null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setSession(session);
+        if (session?.user) {
+          const profile = await fetchUserProfile(session.user);
+          setCurrentUser(profile);
+        } else {
+          setCurrentUser(null);
+        }
+        setLoading(false); // Pastikan loading selesai setelah ada perubahan
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
-  
+
   const navigate = (page) => {
     setView(page);
-  };
-
-  const handleLoginSuccess = (profileData) => {
-    setCurrentUser(profileData);
-    // Sesi sudah diatur oleh onAuthStateChange, jadi kita tidak perlu mengaturnya di sini
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setSession(null);
-    navigate('landing'); // Arahkan kembali ke landing page setelah logout
+    navigate('landing');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        Memuat Aplikasi...
+      </div>
+    );
+  }
 
   // --- Logika untuk menampilkan halaman ---
 
-  // Jika sesi aktif dan data pengguna sudah ada, tampilkan dashboard yang sesuai
   if (session && currentUser) {
     if (currentUser.role === 'admin') {
       return <AdminDashboardPage user={currentUser} onLogout={handleLogout} />;
@@ -73,13 +118,15 @@ function App() {
     if (currentUser.role === 'tutor') {
       return <TutorDashboardPage user={currentUser} onLogout={handleLogout} />;
     }
-    return <DashboardPage user={currentUser} onLogout={handleLogout} />;
+    if (currentUser.role === 'siswa') {
+        return <DashboardPage user={currentUser} onLogout={handleLogout} />;
+    }
   }
 
-  // Jika tidak ada sesi, tampilkan halaman berdasarkan 'view' state
+  // Tampilkan halaman publik jika tidak ada sesi
   switch (view) {
     case 'login':
-      return <LoginPage onLoginSuccess={handleLoginSuccess} onNavigate={navigate} />;
+      return <LoginPage onLoginSuccess={() => {}} onNavigate={navigate} />;
     case 'register':
       return <RegisterPage onNavigate={navigate} />;
     default:
@@ -87,18 +134,18 @@ function App() {
   }
 }
 
-// Buat komponen LandingPage untuk merapikan kode
 const LandingPage = ({ onNavigate }) => (
   <div>
     <Header onNavigate={onNavigate} />
     <main>
       <HeroSection />
       <AboutSection />
-      {/* ... (komponen landing page lainnya) */}
+      <HouseSection />
+      <ProgramSection />
+      <CtaSection onNavigate={onNavigate} />
     </main>
     <Footer />
   </div>
 );
-
 
 export default App;
