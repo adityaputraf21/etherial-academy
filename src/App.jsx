@@ -1,5 +1,6 @@
 // src/App.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
 import Header from './components/Header';
 import HeroSection from './components/sections/HeroSection';
 import AboutSection from './components/sections/AboutSection';
@@ -14,56 +15,62 @@ import TutorDashboardPage from './components/pages/TutorDashboardPage';
 import AdminDashboardPage from './components/pages/AdminDashboardPage';
 
 const LandingPage = ({ onNavigate }) => (
-    <div>
-      <Header onNavigate={onNavigate} />
-      <main>
-        <HeroSection />
-        <AboutSection />
-        <HouseSection />
-        <ProgramSection />
-        <CtaSection onNavigate={onNavigate}/>
-      </main>
-      <Footer />
-    </div>
+    <div><Header onNavigate={onNavigate} /><main><HeroSection /><AboutSection /><HouseSection /><ProgramSection /><CtaSection onNavigate={onNavigate}/></main><Footer /></div>
 );
 
 function App() {
-  const [view, setView] = useState('landing');
+  const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('landing');
 
-  const navigate = (page) => {
-    setView(page);
-  };
+  useEffect(() => {
+    // Listener ini akan menjadi satu-satunya sumber kebenaran untuk status otentikasi
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        setSession(session);
+        if (session) {
+            // Jika ada sesi, ambil profil pengguna
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+            setCurrentUser(profile);
+        } else {
+            // Jika tidak ada sesi, hapus data pengguna
+            setCurrentUser(null);
+        }
+        // Apapun hasilnya, proses memuat selesai
+        setLoading(false);
+    });
 
-  const handleLoginSuccess = (userData) => {
-    console.log("Login berhasil sebagai:", userData.role);
-    setCurrentUser(userData);
-    setView('dashboard'); // Arahkan ke tampilan dashboard
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    navigate('landing');
-  };
-
-  // --- Logika untuk menampilkan halaman ---
+    return () => {
+        // Hentikan listener saat komponen tidak lagi digunakan
+        subscription.unsubscribe();
+    };
+  }, []);
   
-  // Jika sudah ada pengguna yang login, tampilkan dashboard yang sesuai
-  if (currentUser) {
+  const navigate = (page) => setView(page);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+  
+  // Tampilkan layar pemuatan sampai status otentikasi awal diketahui
+
+
+  // Jika ada sesi (sudah login), tampilkan dashboard yang sesuai
+  if (session && currentUser) {
     if (currentUser.role === 'admin') {
       return <AdminDashboardPage user={currentUser} onLogout={handleLogout} />;
     }
     if (currentUser.role === 'tutor') {
       return <TutorDashboardPage user={currentUser} onLogout={handleLogout} />;
     }
-    // Defaultnya adalah siswa
+    // 'student'
     return <DashboardPage user={currentUser} onLogout={handleLogout} />;
   }
 
-  // Jika tidak ada yang login, tampilkan halaman berdasarkan 'view' state
+  // Jika tidak ada sesi, tampilkan halaman publik
   switch (view) {
     case 'login':
-      return <LoginPage onLoginSuccess={handleLoginSuccess} onNavigate={navigate} />;
+      return <LoginPage onNavigate={navigate} />;
     case 'register':
       return <RegisterPage onNavigate={navigate} />;
     default:
